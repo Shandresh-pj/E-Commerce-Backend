@@ -2,10 +2,84 @@ const pool = require("../db");
 
 // GET all products
 exports.getProducts = async (req, res, next) => {
+
   try {
-    const [rows] = await pool.query("SELECT * FROM products_table");
-    res.json(rows);
-  } catch (err) { next(err); }
+
+    // get products
+    const [products] = await pool.query(
+      "SELECT * FROM products_table"
+    );
+
+    // get coupons mapping
+    const [couponRows] = await pool.query(`
+      SELECT
+        cp.product_id,
+        c.code,
+        c.type,
+        c.value
+      FROM coupon_products cp
+      JOIN coupons c
+      ON cp.coupon_id = c.id
+      WHERE c.is_active = 1
+    `);
+
+    // attach coupon to products
+    const updatedProducts = products.map(product => {
+
+      const coupon = couponRows.find(
+        c => c.product_id === product.id
+      );
+
+      let discount_price = product.price;
+
+      if (coupon) {
+
+        // percent discount
+        if (coupon.type === "percent") {
+
+          discount_price =
+            product.price -
+            (product.price * coupon.value) / 100;
+
+        }
+
+        // flat discount
+        if (coupon.type === "flat") {
+
+          discount_price =
+            product.price - coupon.value;
+
+        }
+
+      }
+
+      return {
+
+        ...product,
+
+        images: JSON.parse(
+          product.images || "[]"
+        ),
+
+        coupon: coupon || null,
+
+        discount_price
+
+      };
+
+    });
+
+    return res.status(200).json({
+      success: true,
+      products: updatedProducts
+    });
+
+  } catch (err) {
+
+    next(err);
+
+  }
+
 };
 
 // GET product by ID
@@ -15,6 +89,7 @@ exports.getProductById = async (req, res, next) => {
 
     const { id } = req.params;
 
+    // ================= PRODUCT =================
     const [rows] = await pool.query(
       "SELECT * FROM products_table WHERE id=?",
       [id]
@@ -30,11 +105,76 @@ exports.getProductById = async (req, res, next) => {
 
     const product = rows[0];
 
-    // convert JSON string to array
+    // convert images JSON string to array
     product.images = JSON.parse(
       product.images || "[]"
     );
 
+    // ================= COUPON =================
+    const [couponRows] = await pool.query(
+      `
+      SELECT
+        c.id,
+        c.code,
+        c.type,
+        c.value
+      FROM coupon_products cp
+      JOIN coupons c
+      ON cp.coupon_id = c.id
+      WHERE cp.product_id=? 
+      AND c.is_active=1
+      LIMIT 1
+      `,
+      [id]
+    );
+
+    // default price
+    let discount_price = Number(product.price);
+
+    // apply coupon if exists
+    if (couponRows.length > 0) {
+
+      const coupon = couponRows[0];
+
+      // percent discount
+      if (coupon.type === "percent") {
+
+        discount_price =
+          Number(product.price) -
+          (
+            Number(product.price) *
+            Number(coupon.value)
+          ) / 100;
+
+      }
+
+      // flat discount
+      if (coupon.type === "flat") {
+
+        discount_price =
+          Number(product.price) -
+          Number(coupon.value);
+
+      }
+
+      // prevent negative amount
+      if (discount_price < 0) {
+        discount_price = 0;
+      }
+
+      // attach coupon details
+      product.coupon = coupon;
+
+    } else {
+
+      product.coupon = null;
+
+    }
+
+    // final discount price
+    product.discount_price = discount_price;
+
+    // ================= RESPONSE =================
     return res.status(200).json({
       success: true,
       product

@@ -4,52 +4,71 @@ exports.createOrder = async (req, res, next) => {
 
   try {
 
-    const { user_id, items } = req.body;
+    const { user_id, items, coupon_code } = req.body;
 
-    if (!user_id || !items || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "user_id and items are required"
-      });
-    }
+    let subtotal = 0;
+    let discount = 0;
+    let finalTotal = 0;
 
-    // calculate total
-    let totalAmount = 0;
-
-    items.forEach(item => {
-      totalAmount += item.price * item.quantity;
+    // calculate subtotal first
+    items.forEach(i => {
+      subtotal += i.price * i.quantity;
     });
 
-    // insert order
-    const [orderResult] = await db.query(
-      "INSERT INTO orders (user_id, total_amount) VALUES (?, ?)",
-      [user_id, totalAmount]
-    );
+    // default
+    finalTotal = subtotal;
 
-    const orderId = orderResult.insertId;
+    // check coupon
+    if (coupon_code) {
 
-    // insert order items
-    for (let item of items) {
-
-      await db.query(
-        `INSERT INTO order_items
-        (order_id, product_id, quantity, price)
-        VALUES (?, ?, ?, ?)`,
-        [
-          orderId,
-          item.product_id,
-          item.quantity,
-          item.price
-        ]
+      const [couponRows] = await db.query(
+        "SELECT * FROM coupons WHERE code=? AND is_active=1",
+        [coupon_code]
       );
+
+      if (couponRows.length > 0) {
+
+        const coupon = couponRows[0];
+
+        // get allowed products for coupon
+        const [allowedProducts] = await db.query(
+          "SELECT product_id FROM coupon_products WHERE coupon_id=?",
+          [coupon.id]
+        );
+
+        const allowedIds = allowedProducts.map(p => p.product_id);
+
+        // apply discount ONLY on matching products
+        let discountableAmount = 0;
+
+        for (let item of items) {
+
+          if (allowedIds.includes(item.product_id)) {
+            discountableAmount += item.price * item.quantity;
+          }
+
+        }
+
+        // calculate discount
+        if (coupon.type === "percent") {
+          discount = (discountableAmount * coupon.value) / 100;
+        }
+
+        if (coupon.type === "flat") {
+          discount = coupon.value;
+        }
+
+        finalTotal = subtotal - discount;
+
+      }
 
     }
 
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
-      message: "Order created successfully",
-      order_id: orderId,
-      total: totalAmount
+      subtotal,
+      discount,
+      total: finalTotal
     });
 
   } catch (err) {
