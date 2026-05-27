@@ -1,9 +1,17 @@
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
+
+const uploadPath = "uploads";
+
+// auto-create folder
+if (!fs.existsSync(uploadPath)) {
+  fs.mkdirSync(uploadPath);
+}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/");
+    cb(null, uploadPath);
   },
 
   filename: (req, file, cb) => {
@@ -12,7 +20,6 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-
   const allowedTypes = /jpeg|jpg|png|webp/;
 
   const extname = allowedTypes.test(
@@ -28,19 +35,12 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// const upload = multer({
-//   storage,
-//   fileFilter
-// });
-
-// 👇 THIS IS WHERE YOU ADD LIMITS
 const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB per file
+    fileSize: 10 * 1024 * 1024
   }
 });
-
 
 module.exports = upload;
