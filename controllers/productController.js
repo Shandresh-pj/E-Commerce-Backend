@@ -192,20 +192,17 @@ exports.getProductById = async (req, res, next) => {
 exports.createProduct = async (req, res, next) => {
   try {
 
-    console.log("BODY:", req.body);
-    console.log("FILES:", req.files);
-
     const { name, description, price } = req.body;
 
-    // SINGLE IMAGE
-    const image =
-      req.files?.image?.[0]?.filename || null;
+    const image = req.files?.image?.[0]
+      ? `${req.protocol}://${req.get("host")}/uploads/${req.files.image[0].filename}`
+      : null;
 
-    // MULTIPLE IMAGES
-    const images =
-      req.files?.images
-        ? req.files.images.map(file => file.filename)
-        : [];
+    const images = req.files?.images
+      ? req.files.images.map(file =>
+          `${req.protocol}://${req.get("host")}/uploads/${file.filename}`
+        )
+      : [];
 
     const [result] = await pool.query(
       `INSERT INTO products_table (name, description, price, image, images)
@@ -219,7 +216,7 @@ exports.createProduct = async (req, res, next) => {
       ]
     );
 
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
       product: {
         id: result.insertId,
@@ -232,7 +229,6 @@ exports.createProduct = async (req, res, next) => {
     });
 
   } catch (err) {
-    console.log(err);
     next(err);
   }
 };
