@@ -192,7 +192,7 @@ exports.getProductById = async (req, res, next) => {
 exports.createProduct = async (req, res, next) => {
   try {
 
-    const { name, description, price } = req.body;
+    const { name, description, price, barcode } = req.body;
 
     const image = req.files?.image?.[0]
       ? `${req.protocol}://${req.get("host")}/uploads/${req.files.image[0].filename}`
@@ -205,13 +205,14 @@ exports.createProduct = async (req, res, next) => {
       : [];
 
     const [result] = await pool.query(
-      `INSERT INTO products_table (name, description, price, image, images)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO products_table (name, description, price, barcode, image, images)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         name,
         description,
         price,
         image,
+        barcode,
         JSON.stringify(images)
       ]
     );
@@ -224,7 +225,8 @@ exports.createProduct = async (req, res, next) => {
         description,
         price,
         image,
-        images
+        images, 
+        barcode
       }
     });
 
@@ -242,7 +244,8 @@ exports.updateProduct = async (req, res, next) => {
     const {
       name,
       description,
-      price
+      price,
+      barcode
     } = req.body;
 
     // get old product
@@ -289,12 +292,13 @@ exports.updateProduct = async (req, res, next) => {
     // update product
     await pool.query(
       `UPDATE products_table
-      SET name=?, description=?, price=?, images=?
+      SET name=?, description=?, price=?, images=?, barcode=?
       WHERE id=?`,
       [
         name,
         description,
         price,
+        barcode,
         JSON.stringify(images),
         req.params.id
       ]
@@ -308,7 +312,8 @@ exports.updateProduct = async (req, res, next) => {
         name,
         description,
         price,
-        images
+        images,
+        barcode
       }
     });
 
@@ -378,4 +383,31 @@ exports.deleteProduct = async (req, res, next) => {
 
   }
 
+};
+
+exports.getProductByBarcode = async (req, res, next) => {
+  try {
+
+    const { barcode } = req.params;
+
+    const [rows] = await pool.query(
+      "SELECT * FROM products_table WHERE barcode = ?",
+      [barcode]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      product: rows[0]
+    });
+
+  } catch (err) {
+    next(err);
+  }
 };

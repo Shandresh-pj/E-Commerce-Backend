@@ -274,4 +274,27 @@ router.get("/orders/:id", orderController.getOrderById);
  */
 router.delete("/orders/:id", orderController.deleteOrder);
 
+
+// BarCode Routes
+/**
+ * @swagger
+ * /barcode:
+ *   get:
+ *     summary: Get product by barcode
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: barcode
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: "8901234567890"
+ *     responses:
+ *       200:
+ *         description: Product found
+ *       404:
+ *         description: Product not found
+ */
+router.get("/barcode", productController.getProductByBarcode);
+
 module.exports = router;
