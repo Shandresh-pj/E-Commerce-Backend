@@ -7,7 +7,7 @@ exports.getProfile = async (req, res, next) => {
 
   try {
 
-    const { id } = req.body || {};
+    const id = req.user?.id || req.query.id || req.body?.id || req.params?.id;
 
     // Validation
     if (!id) {
@@ -61,8 +61,8 @@ exports.updateProfile = async (req, res, next) => {
 
     try {
 
+        const id = req.user?.id || req.body?.id;
         const {
-            id,
             name,
             email,
             mobilenumber,

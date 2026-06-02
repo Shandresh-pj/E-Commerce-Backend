@@ -125,13 +125,12 @@ exports.login = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       message: "Login success",
-      // accessToken,
-
-      // user: {
-      //   id: user.id,
-      //   name: user.name,
-      //   email: user.email
-      // }
+      response: {
+        token: accessToken,
+        id: user.id,
+        name: user.name,
+        email: user.email
+      }
     });
 
   } catch (err) {
