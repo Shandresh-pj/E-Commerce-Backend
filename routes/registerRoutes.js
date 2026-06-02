@@ -46,7 +46,7 @@ router.post("/register", upload.single("image"), register);
 /**
  * @swagger
  * /login:
- *   get:
+ *   post:
  *     summary: Login User
  *     tags: [Authentication]
  *     requestBody:
@@ -64,7 +64,7 @@ router.post("/register", upload.single("image"), register);
  *       200:
  *         description: Login successful
  */
-router.get("/login", login);
+router.post("/login", login);
 
 
 /**
