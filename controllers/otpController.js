@@ -8,10 +8,12 @@ const sendSmsOtp = require("../utils/sendSmsOtp");
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000);
 
 exports.sendOtp = async (req, res, next) => {
+
   try {
 
     const { email, mobile } = req.body;
 
+    // VALIDATION
     if (!email && !mobile) {
       return res.status(400).json({
         success: false,
@@ -19,36 +21,97 @@ exports.sendOtp = async (req, res, next) => {
       });
     }
 
+    let registrationId = null;
+
+    // CHECK EMAIL EXISTS IN registration TABLE
+    if (email) {
+
+      const [existingUser] = await db.query(
+        "SELECT id, email FROM registration WHERE email = ?",
+        [email]
+      );
+
+      // EMAIL EXISTS
+      if (existingUser.length > 0) {
+
+        registrationId = existingUser[0].id;
+
+      } else {
+
+        // CREATE NEW USER
+        const [result] = await db.query(
+          `INSERT INTO registration
+          (email, status)
+          VALUES (?, ?)`,
+          [email, "Pending"]
+        );
+
+        registrationId = result.insertId;
+      }
+    }
+
+    // GENERATE OTP
     const otp = generateOTP();
 
+    // OTP EXPIRY
     const expiresAt = new Date(
       Date.now() + 1 * 60 * 1000
     );
 
+    // DELETE OLD OTP
     await db.query(
-      `INSERT INTO otp_verifications
-      (email, mobile, otp, expires_at)
-      VALUES (?, ?, ?, ?)`,
-      [email || null, mobile || null, otp, expiresAt]
+      "DELETE FROM otp_verifications WHERE email = ?",
+      [email]
     );
 
-    // SEND EMAIL
+    // INSERT OTP
+    await db.query(
+      `INSERT INTO otp_verifications
+      (
+        registration_id,
+        email,
+        mobile,
+        otp,
+        expires_at,
+        is_used
+      )
+      VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        registrationId,
+        email || null,
+        mobile || null,
+        otp,
+        expiresAt,
+        0
+      ]
+    );
+
+    // SEND EMAIL OTP
     if (email) {
       await sendEmailOtp(email, otp);
     }
 
-    // SEND SMS
+    // SEND SMS OTP
     if (mobile) {
       await sendSmsOtp(mobile, otp);
     }
 
+    // SUCCESS RESPONSE
     return res.status(200).json({
       success: true,
-      message: "OTP sent successfully"
+      message: "OTP sent successfully",
+      // registration_id: registrationId,
+      // OTP: otp
     });
 
   } catch (err) {
-    next(err);
+
+    console.error("SEND OTP ERROR:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 };
 

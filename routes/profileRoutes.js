@@ -1,6 +1,7 @@
 const express = require("express");
 const { updateProfile, deactiveProfile, getProfile } = require("../controllers/profileController");
 const authMiddleware = require("../middleware/authMiddleware");
+const upload = require("../middleware/upload");
 const router = express.Router();
 
 
@@ -62,7 +63,9 @@ router.get("/profile", authMiddleware, getProfile);
  *       200:
  *         description: Profile Updated successfully
  */
-router.put("/profile/update", authMiddleware, updateProfile );
+router.put('/profile/update', upload.fields([ { name: "image", maxCount: 1 }]), updateProfile);
+// router.put("/profile/update", authMiddleware,  upload.fields([
+//     { name: "image", maxCount: 1 }]), updateProfile );
 
 
 /**

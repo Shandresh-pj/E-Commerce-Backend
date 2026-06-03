@@ -52,7 +52,7 @@ exports.register = async (req, res, next) => {
       success: true,
       message: "Register successfully",
       Id: result.insertId,
-      image
+      Image : image
     });
 
   } catch (err) {
