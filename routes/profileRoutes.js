@@ -1,8 +1,67 @@
 const express = require("express");
-const { updateProfile, deactiveProfile, getProfile } = require("../controllers/profileController");
+const { updateProfile, deactiveProfile, getProfile, getAllProfiles, createProfile } = require("../controllers/profileController");
 const authMiddleware = require("../middleware/authMiddleware");
 const upload = require("../middleware/upload");
 const router = express.Router();
+
+
+
+/**
+ * @swagger
+ * /profile/add:
+ *   post:
+ *     summary: Create Profile
+ *     tags: [Profile]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *               - password
+ *               - mobilenumber
+ *               - address
+ *               - usertype
+ *               - status
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: Admin
+ *               email:
+ *                 type: string
+ *                 example: admin@gmail.com
+ *               password:
+ *                 type: string
+ *                 example: Admin@123
+ *               mobilenumber:
+ *                 type: string
+ *                 example: "9876543210"
+ *               address:
+ *                 type: string
+ *                 example: Madurai, Tamil Nadu
+ *               usertype:
+ *                 type: string
+ *                 example: Super_Admin
+ *               status:
+ *                 type: string
+ *                 example: Active
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Profile created successfully
+ *       400:
+ *         description: Validation failed
+ *       500:
+ *         description: Server error
+ */
+router.post('/profile/add', upload.fields([ { name: "image", maxCount: 1 }]), createProfile);
+
+
 
 
 
@@ -35,6 +94,36 @@ const router = express.Router();
  *         description: Profile retrieved successfully
  */
 router.get("/profile", authMiddleware, getProfile);
+
+/**
+ * @swagger
+ * /profile/all:
+ *   get:
+ *     summary: Get All Profiles
+ *     tags: [Profile]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               mobilenumber:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *       
+ *     responses:
+ *       200:
+ *         description: Profile retrieved successfully
+ */
+router.get("/profile/all", authMiddleware, getAllProfiles);
 
 /**
  * @swagger
