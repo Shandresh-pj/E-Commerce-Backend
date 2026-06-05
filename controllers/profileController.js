@@ -97,11 +97,22 @@ exports.getProfile = async (req, res, next) => {
 
     try {
 
-        const id =
-            req.user?.id ||
-            req.query?.id ||
-            req.body?.id ||
-            req.params?.id;
+        let id =
+            req.user?.id || req.user?.Id || req.user?.ID ||
+            req.query?.id || req.query?.Id || req.query?.ID ||
+            req.body?.id || req.body?.Id || req.body?.ID ||
+            req.params?.id || req.params?.Id || req.params?.ID;
+
+        // Fallback: If no ID is found in request/token but email is present in req.user, look up by email
+        if (!id && req.user?.email) {
+            const [userRows] = await db.query(
+                "SELECT id, Id, ID FROM registration WHERE email = ?",
+                [req.user.email]
+            );
+            if (userRows && userRows.length > 0) {
+                id = userRows[0].id || userRows[0].Id || userRows[0].ID;
+            }
+        }
 
         if (!id) {
             return res.status(400).json({
@@ -182,7 +193,18 @@ exports.getAllProfiles = async (req, res, next) => {
 exports.updateProfile = async (req, res, next) => {
     try {
 
-        const id = req.user?.id || req.body?.id;
+        let id = req.user?.id || req.user?.Id || req.user?.ID || req.body?.id || req.body?.Id || req.body?.ID;
+
+        // Fallback: If no ID is found in request/token but email is present in req.user, look up by email
+        if (!id && req.user?.email) {
+            const [userRows] = await db.query(
+                "SELECT id, Id, ID FROM registration WHERE email = ?",
+                [req.user.email]
+            );
+            if (userRows && userRows.length > 0) {
+                id = userRows[0].id || userRows[0].Id || userRows[0].ID;
+            }
+        }
 
         const { name, email, mobilenumber, address } = req.body;
 

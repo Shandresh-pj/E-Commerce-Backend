@@ -112,7 +112,7 @@ exports.login = async (req, res, next) => {
     // access token
     const accessToken = jwt.sign(
       {
-        id: user.id,
+        id: user.id || user.Id || user.ID,
         email: user.email
       },
       process.env.JWT_SECRET,
@@ -127,7 +127,7 @@ exports.login = async (req, res, next) => {
       message: "Login success",
       response: {
         token: accessToken,
-        id: user.id,
+        id: user.id || user.Id || user.ID,
         name: user.name,
         email: user.email
       }

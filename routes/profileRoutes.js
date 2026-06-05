@@ -153,6 +153,7 @@ router.get("/profile/all", authMiddleware, getAllProfiles);
  *         description: Profile Updated successfully
  */
 router.put('/profile/update', upload.fields([ { name: "image", maxCount: 1 }]), updateProfile);
+router.post('/profile/update', upload.fields([ { name: "image", maxCount: 1 }]), updateProfile);
 // router.put("/profile/update", authMiddleware,  upload.fields([
 //     { name: "image", maxCount: 1 }]), updateProfile );
 
