@@ -1,16 +1,24 @@
 const pool = require("../db");
+const path = require("path");
+const fs = require("fs");
 
 // GET all products
 exports.getProducts = async (req, res, next) => {
-
   try {
 
-    // get products
-    const [products] = await pool.query(
-      "SELECT * FROM products_table"
-    );
+    const [products] = await pool.query(`
+      SELECT
+        p.*,
+        r.id AS creator_id,
+        r.name AS creator_name,
+        r.email AS creator_email,
+        r.mobilenumber AS creator_mobile
+      FROM products_table p
+      LEFT JOIN registration r
+        ON p.registration_id = r.id
+      ORDER BY p.id DESC
+    `);
 
-    // get coupons mapping
     const [couponRows] = await pool.query(`
       SELECT
         cp.product_id,
@@ -19,35 +27,36 @@ exports.getProducts = async (req, res, next) => {
         c.value
       FROM coupon_products cp
       JOIN coupons c
-      ON cp.coupon_id = c.id
+        ON cp.coupon_id = c.id
       WHERE c.is_active = 1
     `);
 
-    // attach coupon to products
-    const updatedProducts = products.map(product => {
+    const finalProducts = products.map(product => {
 
       const coupon = couponRows.find(
         c => c.product_id === product.id
       );
 
-      let discount_price = product.price;
+      let discount_price = Number(product.price);
 
       if (coupon) {
 
-        // percent discount
         if (coupon.type === "percent") {
 
           discount_price =
-            product.price -
-            (product.price * coupon.value) / 100;
+            Number(product.price) -
+            (
+              Number(product.price) *
+              Number(coupon.value)
+            ) / 100;
 
         }
 
-        // flat discount
         if (coupon.type === "flat") {
 
           discount_price =
-            product.price - coupon.value;
+            Number(product.price) -
+            Number(coupon.value);
 
         }
 
@@ -57,9 +66,18 @@ exports.getProducts = async (req, res, next) => {
 
         ...product,
 
-        images: JSON.parse(
-          product.images || "[]"
-        ),
+        image: product.image || null,
+
+        images: product.images
+          ? JSON.parse(product.images)
+          : [],
+
+        creator: {
+          id: product.creator_id,
+          name: product.creator_name,
+          email: product.creator_email,
+          mobile: product.creator_mobile
+        },
 
         coupon: coupon || null,
 
@@ -71,32 +89,35 @@ exports.getProducts = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      products: updatedProducts
+      totalRecords: finalProducts.length,
+      products: finalProducts
     });
 
   } catch (err) {
-
     next(err);
-
   }
-
 };
 
 // GET product by ID
 exports.getProductById = async (req, res, next) => {
-
   try {
 
     const { id } = req.params;
 
-    // ================= PRODUCT =================
-    const [rows] = await pool.query(
-      "SELECT * FROM products_table WHERE id=?",
-      [id]
-    );
+    const [rows] = await pool.query(`
+      SELECT
+        p.*,
+        r.id AS creator_id,
+        r.name AS creator_name,
+        r.email AS creator_email,
+        r.mobilenumber AS creator_mobile
+      FROM products_table p
+      LEFT JOIN registration r
+        ON p.registration_id = r.id
+      WHERE p.id = ?
+    `, [id]);
 
-    // product not found
-    if (rows.length === 0) {
+    if (!rows.length) {
       return res.status(404).json({
         success: false,
         message: "Product not found"
@@ -105,14 +126,7 @@ exports.getProductById = async (req, res, next) => {
 
     const product = rows[0];
 
-    // convert images JSON string to array
-    product.images = JSON.parse(
-      product.images || "[]"
-    );
-
-    // ================= COUPON =================
-    const [couponRows] = await pool.query(
-      `
+    const [couponRows] = await pool.query(`
       SELECT
         c.id,
         c.code,
@@ -120,23 +134,20 @@ exports.getProductById = async (req, res, next) => {
         c.value
       FROM coupon_products cp
       JOIN coupons c
-      ON cp.coupon_id = c.id
-      WHERE cp.product_id=? 
-      AND c.is_active=1
+        ON cp.coupon_id = c.id
+      WHERE cp.product_id = ?
+      AND c.is_active = 1
       LIMIT 1
-      `,
-      [id]
-    );
+    `, [id]);
 
-    // default price
     let discount_price = Number(product.price);
 
-    // apply coupon if exists
+    let coupon = null;
+
     if (couponRows.length > 0) {
 
-      const coupon = couponRows[0];
+      coupon = couponRows[0];
 
-      // percent discount
       if (coupon.type === "percent") {
 
         discount_price =
@@ -148,7 +159,6 @@ exports.getProductById = async (req, res, next) => {
 
       }
 
-      // flat discount
       if (coupon.type === "flat") {
 
         discount_price =
@@ -157,76 +167,96 @@ exports.getProductById = async (req, res, next) => {
 
       }
 
-      // prevent negative amount
-      if (discount_price < 0) {
-        discount_price = 0;
-      }
-
-      // attach coupon details
-      product.coupon = coupon;
-
-    } else {
-
-      product.coupon = null;
-
     }
 
-    // final discount price
-    product.discount_price = discount_price;
-
-    // ================= RESPONSE =================
     return res.status(200).json({
       success: true,
-      product
+      product: {
+
+        ...product,
+
+        image: product.image || null,
+
+        images: product.images
+          ? JSON.parse(product.images)
+          : [],
+
+        creator: {
+          id: product.creator_id,
+          name: product.creator_name,
+          email: product.creator_email,
+          mobile: product.creator_mobile
+        },
+
+        coupon,
+
+        discount_price
+
+      }
     });
 
   } catch (err) {
-
     next(err);
-
   }
-
 };
 
 // CREATE product
 exports.createProduct = async (req, res, next) => {
   try {
 
-    const { name, description, price, barcode } = req.body;
+    const {
+      name,
+      description,
+      price,
+      barcode,
+      registration_id
+    } = req.body;
 
     const image = req.files?.image?.[0]
       ? `${req.protocol}://${req.get("host")}/uploads/${req.files.image[0].filename}`
       : null;
 
-    const images = req.files?.images
+    const images = req.files?.images?.length
       ? req.files.images.map(file =>
           `${req.protocol}://${req.get("host")}/uploads/${file.filename}`
         )
       : [];
 
     const [result] = await pool.query(
-      `INSERT INTO products_table (name, description, price, barcode, image, images)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO products_table
+      (
+        name,
+        description,
+        price,
+        barcode,
+        image,
+        images,
+        registration_id
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
         description,
         price,
-        image,
         barcode,
-        JSON.stringify(images)
+        image,
+        JSON.stringify(images),
+        registration_id
       ]
     );
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
+      message: "Product created successfully",
       product: {
         id: result.insertId,
         name,
         description,
         price,
+        barcode,
         image,
-        images, 
-        barcode
+        images,
+        registration_id
       }
     });
 
@@ -238,23 +268,24 @@ exports.createProduct = async (req, res, next) => {
 
 // UPDATE product
 exports.updateProduct = async (req, res, next) => {
-
   try {
 
     const {
       name,
       description,
       price,
-      barcode
+      barcode,
+      registration_id
     } = req.body;
 
-    // get old product
+    const productId = req.params.id;
+
+    // Find product
     const [rows] = await pool.query(
       "SELECT * FROM products_table WHERE id=?",
-      [req.params.id]
+      [productId]
     );
 
-    // not found
     if (rows.length === 0) {
       return res.status(404).json({
         success: false,
@@ -264,43 +295,105 @@ exports.updateProduct = async (req, res, next) => {
 
     const oldProduct = rows[0];
 
-    // old images
-    const oldImages = JSON.parse(
+    let image = oldProduct.image;
+
+    let images = JSON.parse(
       oldProduct.images || "[]"
     );
 
-    // delete old images from uploads folder
-    oldImages.forEach(image => {
+    /*
+    ====================================
+    SINGLE IMAGE UPDATE
+    ====================================
+    */
 
-      const imagePath = path.join(
-        __dirname,
-        "../uploads",
-        image
-      );
+    if (req.files?.image?.length) {
 
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
+      // Delete old image
+
+      if (oldProduct.image) {
+
+        const oldImageName =
+          oldProduct.image.split("/").pop();
+
+        const oldImagePath = path.join(
+          __dirname,
+          "../uploads",
+          oldImageName
+        );
+
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlinkSync(oldImagePath);
+        }
+
       }
 
-    });
+      image =
+        `${req.protocol}://${req.get("host")}/uploads/${req.files.image[0].filename}`;
 
-    // new uploaded images
-    const images = req.files.map(
-      file => file.filename
-    );
+    }
 
-    // update product
+    /*
+    ====================================
+    MULTIPLE IMAGE UPDATE
+    ====================================
+    */
+
+    if (req.files?.images?.length) {
+
+      // Delete old gallery images
+
+      images.forEach(imageUrl => {
+
+        const imageName =
+          imageUrl.split("/").pop();
+
+        const imagePath = path.join(
+          __dirname,
+          "../uploads",
+          imageName
+        );
+
+        if (fs.existsSync(imagePath)) {
+          fs.unlinkSync(imagePath);
+        }
+
+      });
+
+      // New gallery images
+
+      images = req.files.images.map(file =>
+        `${req.protocol}://${req.get("host")}/uploads/${file.filename}`
+      );
+
+    }
+
+    /*
+    ====================================
+    UPDATE DATABASE
+    ====================================
+    */
+
     await pool.query(
       `UPDATE products_table
-      SET name=?, description=?, price=?, images=?, barcode=?
-      WHERE id=?`,
+       SET
+         name=?,
+         description=?,
+         price=?,
+         barcode=?,
+         image=?,
+         images=?,
+         registration_id=?
+       WHERE id=?`,
       [
         name,
         description,
         price,
         barcode,
+        image,
         JSON.stringify(images),
-        req.params.id
+        registration_id,
+        productId
       ]
     );
 
@@ -308,21 +401,24 @@ exports.updateProduct = async (req, res, next) => {
       success: true,
       message: "Product updated successfully",
       product: {
-        id: req.params.id,
+        id: productId,
         name,
         description,
         price,
+        barcode,
+        image,
         images,
-        barcode
+        registration_id
       }
     });
 
   } catch (err) {
 
+    console.error(err);
+
     next(err);
 
   }
-
 };
 
 // DELETE product
@@ -385,29 +481,26 @@ exports.deleteProduct = async (req, res, next) => {
 
 };
 
-exports.getProductByBarcode = async (req, res, next) => {
-  try {
+exports.getProductByBarcode = async (req, res) => {
 
-    const { barcode } = req.params;
+  const { barcode } = req.params;
 
-    const [rows] = await pool.query(
-      "SELECT * FROM products_table WHERE barcode = ?",
-      [barcode]
-    );
+  const [rows] = await pool.query(
+    `SELECT * FROM products_table
+     WHERE barcode = ?`,
+    [barcode]
+  );
 
-    if (!rows.length) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found"
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      product: rows[0]
+  if (!rows.length) {
+    return res.status(404).json({
+      success: false,
+      message: "Product not found"
     });
-
-  } catch (err) {
-    next(err);
   }
+
+  return res.json({
+    success: true,
+    product: rows[0]
+  });
+
 };
